@@ -3,13 +3,14 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Pizza, Ingredient, Drink, Dessert, Order, order_pizzas, order_drinks
-
+from order import OrderStatusTracker
 
 class PizzaService:
     def __init__(self, db_url):
         engine = create_engine(db_url)
         Session = sessionmaker(bind=engine)
         self.session = Session()
+        self.order_status_tracker = OrderStatusTracker()
 
     def fetch_pizzas(self):
         try:
@@ -117,3 +118,15 @@ class PizzaService:
         for drink in drinks:
             self.session.execute(order_drinks.insert().values(order_id = new_order.id, drink_id = drink.Id))
 
+    def cancel_order(self, order_id):
+        if self.order_status_tracker.cancel_order(order_id):
+            try:
+                order = self.session.query(Order).filter_by(Id = order_id).one()
+                self.session.delete(order)
+                self.session.commit()
+                return True
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                return False
+        else:
+            return False
