@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Customer Handling")
         self.setGeometry(100, 100, 400, 300)
 
-        self.customer_handling = CustomerHandling('mysql+pymysql://root:hello@localhost/pizza')
+        self.customer_handling = CustomerHandling('mysql+pymysql://root:hello@localhost/pizza_db_new')
 
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)

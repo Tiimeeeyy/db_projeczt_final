@@ -45,11 +45,16 @@ class TestGUI(QMainWindow):
         self.setCentralWidget(container)
 
         # Set up the pizza service
-        self.pizza_service = PizzaService('mysql+pymysql://root:hello@localhost/pizza')
+        self.pizza_service = PizzaService('mysql+pymysql://root:hello@localhost/pizza_db_new')
 
     def add_pizza(self):
-        self.pizza_service.add_pizza("Margherita", True, False, 8.99)
-        self.label.setText("Added Margherita pizza.")
+        try:
+            logging.debug("Adding Margharita Pizza")
+            self.pizza_service.add_pizza("Margherita", True, False, 8.99)
+            self.label.setText("Added Margherita pizza.")
+        except Exception as e:
+            logging.error(f"An error occured {e}")
+            self.label.setText(f"An error occured")
 
     def fetch_pizzas(self):
         try:

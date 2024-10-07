@@ -61,6 +61,7 @@ class Order(Base):
     total_price = Column(Float, name='TotalPrice', nullable=False)
     customer_id = Column(Integer, ForeignKey('customers.Id'), name='CustomerId', nullable=True)
     customer = relationship('Customer')
+    status = Column(String, name='Status', default='Pending', nullable=False)
 
 class DeliveryPerson(Base):
     __tablename__ = 'delivery_persons'

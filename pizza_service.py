@@ -108,7 +108,8 @@ class PizzaService:
             order_date=datetime.now(),
             customer_id=customer_id,
             is_discount_applied=is_discount_applied,
-            total_price=total_price
+            total_price=total_price,
+            status = "Pending"
         )
         self.session.add(new_order)
         self.session.commit()

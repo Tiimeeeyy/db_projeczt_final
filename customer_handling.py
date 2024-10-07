@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import Customer
+from models import Customer, Order
 
 # This class handles all
 class CustomerHandling:
@@ -30,3 +30,21 @@ class CustomerHandling:
         else:
             print("Invalid name or Password")
             return False
+        
+
+    def send_order_confirmation(self, order_id, customer_email):
+        try:
+            order = self.session.query(Order).filter_by(Id=order_id).one()
+            estimated_delivery_time = self.calculate_estimated_delivery_time(order_id)
+            order_details = f"Order ID: {order_id}\nTotal Price: {order.total_price}\nEstimated Delivery Time: {estimated_delivery_time}"
+            self.send_email(customer_email, "Order Confirmation", order_details)
+            print(f"Order confirmation sent to {customer_email}")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+    def calculate_estimated_delivery_time(order_id):
+        # Logic to calculate estimated delivery time
+        return "30 minutes"
+
+    def send_email(self, customer_email, param, order_details):
+        pass
