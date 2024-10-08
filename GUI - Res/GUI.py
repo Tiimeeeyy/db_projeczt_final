@@ -6,6 +6,7 @@ from models import Customer
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
 
+#Customer Handling class
 class CustomerHandling:
     def __init__(self, db_url):
         try:
