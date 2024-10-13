@@ -1,18 +1,18 @@
 import customtkinter as ctk
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import sessionmaker
-from models import Customer
+from models import Customer, Pizza
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
 
-#Customer Handling class
+# Customer Handling class
 class CustomerHandling:
     def __init__(self, db_url):
         try:
             engine = create_engine(db_url)
-            session = sessionmaker(bind=engine)
-            self.session = session()
+            Session = sessionmaker(bind=engine)
+            self.session = Session()
         except exc.SQLAlchemyError as e:
             print(f"Error connecting to the database: {e}")
             self.session = None
@@ -47,12 +47,52 @@ class CustomerHandling:
             print("Invalid username or password")
             return False
 
+class PizzaHandling:
+    def __init__(self, db_url):
+        try:
+            engine = create_engine(db_url)
+            Session = sessionmaker(bind=engine)
+            self.session = Session()
+        except exc.SQLAlchemyError as e:
+            print(f"Error connecting to the database: {e}")
+            self.session = None
+
+    def get_pizzas(self):
+        if not self.session:
+            print("Database session is not available.")
+            return []
+
+        try:
+            pizzas = self.session.query(Pizza).all()
+            return pizzas
+        except exc.SQLAlchemyError as e:
+            print(f"Error retrieving pizzas: {e}")
+            return []
+
+    def add_pizza(self, name, price, is_vegetarian, is_vegan):
+        if not self.session:
+            print("Database session is not available.")
+            return False
+
+        new_pizza = Pizza(name=name, price=price, is_vegetarian=is_vegetarian, is_vegan=is_vegan)
+        self.session.add(new_pizza)
+        try:
+            self.session.commit()
+            print(f"Pizza '{name}' added to the catalogue.")
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"Error adding pizza: {e}")
+            return False
+
+
 class LoginRegisterApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         # Database handler
         self.customer_handler = CustomerHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
+        self.pizza_handler = PizzaHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
 
         # Window
         self.title("1453-Pizza")
@@ -118,13 +158,27 @@ class LoginRegisterApp(ctk.CTk):
         switch_to_login.pack(pady=(5, 10))
 
     def init_menu_frame(self):
-        self.menu_frame = ctk.CTkFrame(self, corner_radius=15)
+        self.menu_frame = ctk.CTkScrollableFrame(self, corner_radius=15)
 
         menu_label = ctk.CTkLabel(self.menu_frame, text="Main Menu", font=ctk.CTkFont(size=24, weight="bold"))
         menu_label.pack(pady=(10, 20))
 
         logout_button = ctk.CTkButton(self.menu_frame, text="Logout", command=self.show_login_frame)
         logout_button.pack(pady=(10, 20))
+
+    def init_admin_menu_frame(self):
+        self.admin_menu = ctk.CTkScrollableFrame(self, corner_radius=15)
+
+        menu_label = ctk.CTkLabel(self.admin_menu_frame, text="Admin Menu", font=ctk.CTkFont(size=24, weight="bold"))
+        menu_label.pack(pady=(10,20))
+
+        add_pizza_button = ctk.CTkButton(self.admin_menu_frame, text="Add Pizza", command=self.show_add_pizza_form)
+        add_pizza_button.pack(pady=(10,10))
+
+        # manage_pizza_button = ctk.CTkButton(self.admin_meny_frame, text="Manage Pizzas", command=self.show_manage_pizza)
+
+        logout_button = ctk.CTkButton(self.admin_menu_frame, text="Logout", command=self.show_login_frame)
+        logout_button.pack(pady=(10,20))
 
     def show_login_frame(self):
         if hasattr(self, 'register_frame') and self.register_frame is not None:
@@ -148,7 +202,32 @@ class LoginRegisterApp(ctk.CTk):
             self.login_frame.pack_forget()
             self.login_frame.destroy()
         self.init_menu_frame()
+        pizzas = self.pizza_handler.get_pizzas()
+
+        for widget in self.menu_frame.winfo_children():
+            widget.destroy()
+
+        if not pizzas:
+            no_pizza_label = ctk.CTkLabel(self.menu_frame, text="No pizzas available.")
+            no_pizza_label.pack(pady=(5, 5), padx=(5, 5), fill="x")
+        else:
+            for pizza in pizzas:
+                pizza_label = ctk.CTkLabel(self.menu_frame, text=f"{pizza.name} - {pizza.price}e")
+                pizza_label.pack(pady=(5, 5), padx=(5, 5), fill="x")
+
+                addtocart_button = ctk.CTkButton(self.menu_frame, text="Add", command=lambda p=pizza: self.order_pizza(p))
+                addtocart_button.pack(pady=(5, 5), padx=(5, 5), fill="x")
+
         self.menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
+
+    def show_admin_menu(self):
+
+
+        self.init_admin_menu_frame()
+        self.admin_menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
+
+
+
 
     def register_customer(self):
         name = self.reg_username_entry.get()
@@ -165,7 +244,7 @@ class LoginRegisterApp(ctk.CTk):
                 self.register_frame.destroy()
                 self.init_login_frame()
                 self.login_frame.pack(pady=50, padx=50, fill="both", expand=True)
-                self.show_message("Registered successfully! Please log in.", bg_color="green", text_color="white" )
+                self.show_message("Registered successfully! Please log in.", bg_color="green", text_color="white")
         else:
             self.show_message("Passwords do not match.", bg_color="red", text_color="white")
 
@@ -182,6 +261,13 @@ class LoginRegisterApp(ctk.CTk):
         message_label = ctk.CTkLabel(self, text=message, font=ctk.CTkFont(size=14), fg_color=bg_color, text_color=text_color, corner_radius=15)
         message_label.pack(pady=(10, 10), padx=(10, 10), fill="x")
         self.after(1500, message_label.destroy)
+
+    def admin_menu(self):
+
+
+    # def order_pizza(self, pizza):
+        # Placeholder for adding pizza to an order
+    #    self.show_message(f"{pizza.name} added to cart.", bg_color="green", text_color="white")
 
 if __name__ == "__main__":
     app = LoginRegisterApp()
