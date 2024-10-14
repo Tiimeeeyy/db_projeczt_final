@@ -48,6 +48,20 @@ class Customer(Base):
     def check_pw(self, password):
         return bcrypt.checkpw(password.encode('utf-8'), self.password.encode('utf-8'))
 
+class Admin(Base):
+    __tablename__ = 'admins'
+
+    id = Column(Integer, primary_key=True, autoincrement=True, name='Id')
+    name = Column(String, name='Name', nullable=False)
+    gender = Column(String, name='Gender', nullable=False)
+    password = Column(String, name='Password', nullable=False)
+
+    def set_pw(self, password):
+        self.password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    def check_pw(self, password):
+        return bcrypt.checkpw(password.encode('utf-8'), self.password.encode('utf-8'))
+
+
 class Order(Base):
     __tablename__ = 'orders'
     id = Column(Integer, primary_key=True, autoincrement=True, name='Id')
