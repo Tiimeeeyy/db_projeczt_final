@@ -1,9 +1,11 @@
 import customtkinter as ctk
-from sqlalchemy import create_engine, exc
+from sqlalchemy import create_engine, exc, func, extract
 from sqlalchemy.orm import sessionmaker
-from models import Customer, Pizza, Drink, Dessert, Admin, Order
+from models import Base, Customer, Pizza, Drink, Dessert, Admin, Order, DeliveryPersonnel
 from datetime import datetime
 import bcrypt
+from order import OrderStatusTracker
+
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -13,6 +15,7 @@ class CustomerHandling:
     def __init__(self, db_url):
         try:
             engine = create_engine(db_url)
+            Base.metadata.create_all(engine)
             Session = sessionmaker(bind=engine)
             self.session = Session()
             self.create_default_admin()
@@ -75,7 +78,7 @@ class CustomerHandling:
         customer = self.session.query(Customer).filter_by(name=username).first()
         if customer and customer.check_pw(password):
             print(f"Customer '{username}' logged in successfully")
-            return "customer", customer.Id  # Return customer Id
+            return "customer", customer.Id
         else:
             print("Invalid username or password")
             return False
@@ -98,6 +101,7 @@ class ItemHandling:
     def __init__(self, db_url):
         try:
             engine = create_engine(db_url)
+            Base.metadata.create_all(engine)
             Session = sessionmaker(bind=engine)
             self.session = Session()
         except exc.SQLAlchemyError as e:
@@ -242,6 +246,7 @@ class ItemGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        self.staff_op_handler = StaffOp("mysql+pymysql://root:Porto123@localhost/pizza_db")
         self.customer_handler = CustomerHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
         self.item_handler = ItemHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
 
@@ -250,8 +255,8 @@ class ItemGUI(ctk.CTk):
         self.resizable(False, False)
 
         self.current_frame = None
-        self.current_user_id = None  # To keep track of the logged-in customer
-        self.cart = []  # To store items added to cart
+        self.current_user_id = None
+        self.cart = []
 
         self.show_login_frame()
 
@@ -399,22 +404,48 @@ class ItemGUI(ctk.CTk):
             return
 
         try:
-            order_items = ", ".join([f"{item['type']} {item['name']}" for item in self.cart])
             total_price = sum(item['price'] for item in self.cart)
+            customer = self.customer_handler.session.query(Customer).filter_by(Id=self.current_user_id).first()
+            if not customer:
+                self.display_message("Customer not found.", "red")
+                return
+
             new_order = Order(
                 order_date=datetime.now(),
-                customer_name=self.session.query(Customer).filter_by(Id=self.current_user_id).first().name,
-                customer_gender=self.session.query(Customer).filter_by(Id=self.current_user_id).first().gender,
-                customer_birthdate=self.session.query(Customer).filter_by(Id=self.current_user_id).first().birthdate,
-                customer_phone="",  # Assuming you have a phone number field or adjust accordingly
-                customer_address=self.session.query(Customer).filter_by(Id=self.current_user_id).first().address,
-                is_discount_applied=False,  # Adjust as needed
+                customer_name=customer.name,
+                customer_gender=customer.gender,
+                customer_birthdate=customer.birthdate,
+                customer_phone="",
+                customer_address=customer.address,
+                is_discount_applied=False,
                 total_price=total_price,
                 customer_id=self.current_user_id,
                 status="Pending"
             )
+
+
             self.item_handler.session.add(new_order)
+            self.item_handler.session.flush()
+
+
+            for cart_item in self.cart:
+                item_type = cart_item['type']
+                item_id = cart_item['id']
+                if item_type == "Pizza":
+                    pizza = self.item_handler.session.query(Pizza).filter_by(Id=item_id).first()
+                    if pizza:
+                        new_order.pizzas.append(pizza)
+                elif item_type == "Drink":
+                    drink = self.item_handler.session.query(Drink).filter_by(Id=item_id).first()
+                    if drink:
+                        new_order.drinks.append(drink)
+                elif item_type == "Dessert":
+                    dessert = self.item_handler.session.query(Dessert).filter_by(Id=item_id).first()
+                    if dessert:
+                        new_order.desserts.append(dessert)
+
             self.item_handler.session.commit()
+
             self.display_message("Order placed successfully!", "green")
             self.cart = []  # Clear the cart
         except Exception as e:
@@ -427,11 +458,20 @@ class ItemGUI(ctk.CTk):
         self.show_menu_frame()
 
     def add_to_cart(self, item, item_type):
+        item_id = item.Id
+
+        for cart_item in self.cart:
+            if cart_item['id'] == item_id and cart_item['type'] == item_type:
+                cart_item['quantity'] += 1
+                self.display_message(f"Increased quantity of {item.name} in cart.", "green")
+                return
+
         self.cart.append({
-            'id': item.Id,  # Use 'Id' with capital 'I'
+            'id': item_id,
             'name': item.name,
             'price': item.price,
-            'type': item_type
+            'type': item_type,
+            'quantity': 1
         })
         self.display_message(f"Added {item.name} to cart.", "green")
 
@@ -484,9 +524,10 @@ class ItemGUI(ctk.CTk):
 
         if pizzas:
             for pizza in pizzas:
+                pizza_id = pizza.Id
                 pizza_label = ctk.CTkLabel(
                     self.current_frame,
-                    text=f"ID: {pizza.Id}, Name: {pizza.name}, Price: ${pizza.price}, "
+                    text=f"ID: {pizza_id}, Name: {pizza.name}, Price: ${pizza.price}, "
                          f"Vegetarian: {pizza.is_vegetarian}, Vegan: {pizza.is_vegan}"
                 )
                 pizza_label.pack(pady=(5, 5))
