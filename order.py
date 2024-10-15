@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import Order
+from models import Order, Customer
 
 
 class OrderStatusTracker:
@@ -46,3 +46,11 @@ class OrderStatusTracker:
 			self.session.commit()
 			return True
 		return False
+
+	def get_order_count(self, customer_id):
+		return self.session.query(Order).filter_by(customer_id=customer_id).count()
+
+	def is_birthday(self, customer_id):
+		customer = self.session.query(Customer).filter_by(customer_id=customer_id).one
+		today = datetime.now().date()
+		return customer.birthdate.month == today.month and customer.birthdate.day == today.day

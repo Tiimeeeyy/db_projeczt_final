@@ -5,12 +5,13 @@ from sqlalchemy.orm import sessionmaker
 from models import Pizza, Ingredient, Drink, Dessert, Order, order_pizzas, order_drinks
 from order import OrderStatusTracker
 
+
 class PizzaService:
     def __init__(self, db_url):
         engine = create_engine(db_url)
         Session = sessionmaker(bind=engine)
         self.session = Session()
-        self.order_status_tracker = OrderStatusTracker()
+        self.order_status_tracker = OrderStatusTracker(db_url)
 
     def fetch_pizzas(self):
         try:
@@ -104,11 +105,13 @@ class PizzaService:
             return None
 
     def create_order(self, customer_id, pizzas, drinks, desserts, is_discount_applied, total_price):
+        order_count = self.order_status_tracker.get_order_count(customer_id)
+        discount = 0.1 if order_count % 10 == 0 or self.order_status_tracker.is_birthday else 0.0
         new_order = Order (
             order_date=datetime.now(),
             customer_id=customer_id,
             is_discount_applied=is_discount_applied,
-            total_price=total_price,
+            total_price=total_price * (1-discount),
             status = "Pending"
         )
         self.session.add(new_order)
