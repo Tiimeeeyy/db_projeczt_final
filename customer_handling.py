@@ -10,6 +10,7 @@ class CustomerHandling:
         session = sessionmaker(bind=engine)
         self.session = session()
 
+
     def register_customer(self, name, gender, birthdate, address, password):
         new_customer = Customer(
             name = name,
@@ -42,8 +43,7 @@ class CustomerHandling:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def calculate_estimated_delivery_time(order_id):
-        # Logic to calculate estimated delivery time
+    def calculate_estimated_delivery_time(self, order_id):
         return "30 minutes"
 
     def send_email(self, customer_email, param, order_details):
