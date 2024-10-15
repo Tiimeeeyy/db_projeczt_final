@@ -249,7 +249,7 @@ class ItemGUI(ctk.CTk):
         self.staff_op_handler = StaffOp("mysql+pymysql://root:Porto123@localhost/pizza_db")
         self.customer_handler = CustomerHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
         self.item_handler = ItemHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
-
+        self.order_tracker = OrderStatusTracker("mysql+pymysql://root:Porto123@localhost/pizza_db")
         self.title("1453-Items")
         self.geometry("500x600")
         self.resizable(False, False)
@@ -447,7 +447,8 @@ class ItemGUI(ctk.CTk):
             self.item_handler.session.commit()
 
             self.display_message("Order placed successfully!", "green")
-            self.cart = []  # Clear the cart
+            self.order_tracker.start_tracking(new_order.Id)
+            self.cart = []
         except Exception as e:
             self.item_handler.session.rollback()
             self.display_message("Failed to place order.", "red")
@@ -508,9 +509,93 @@ class ItemGUI(ctk.CTk):
 
         view_pizzas_button = ctk.CTkButton(self.current_frame, text="View Pizzas", command=self.show_view_pizzas)
         view_pizzas_button.pack(pady=(10, 10))
+        view_personnel_button = ctk.CTkButton(self.current_frame, text="View Personnel",
+                                              command=self.show_view_personnel)
+        view_personnel_button.pack(pady=(10, 10))
+
+        generate_report_button = ctk.CTkButton(self.current_frame, text="Generate Monthly Report",
+                                               command=self.show_generate_report_frame)
+        generate_report_button.pack(pady=(10, 10))
 
         logout_button = ctk.CTkButton(self.current_frame, text="Logout", command=self.show_login_frame)
         logout_button.pack(pady=(20, 10))
+
+    def show_view_personnel(self):
+        self.clear_frame()
+        self.current_frame = ctk.CTkScrollableFrame(self, corner_radius=15)
+        self.current_frame.pack(pady=20, padx=20, fill="both", expand=True)
+
+        personnel = self.staff_op_handler.get_delivery_personnel()
+
+        view_label = ctk.CTkLabel(self.current_frame, text="Delivery Personnel", font=ctk.CTkFont(size=24, weight="bold"))
+        view_label.pack(pady=(10, 20))
+
+        if personnel:
+            for person in personnel:
+                person_id = person.Id if hasattr(person, 'Id') else person.id
+                person_label = ctk.CTkLabel(
+                    self.current_frame,
+                    text=f"ID: {person_id}, Name: {person.name}, Postal Code: {person.postal_code}, "
+                         f"Available: {'Yes' if person.available else 'No'}"
+                )
+                person_label.pack(pady=(5, 5))
+
+                if person.available:
+                    assign_button = ctk.CTkButton(self.current_frame, text="Assign to Order",
+                                                  command=lambda p=person: self.assign_rider(p))
+                    assign_button.pack(pady=(0, 10))
+        else:
+            no_person_label = ctk.CTkLabel(self.current_frame, text="No personnel available.")
+            no_person_label.pack(pady=(10, 10))
+
+        back_button = ctk.CTkButton(self.current_frame, text="Back", command=self.show_admin_menu_frame)
+        back_button.pack(pady=(20, 10))
+
+    def assign_rider(self, person):
+
+        pending_order = self.staff_op_handler.session.query(Order).filter_by(status="Pending").first()
+        if pending_order:
+            result = self.staff_op_handler.assign_rider_to_order(pending_order)
+            self.display_message(result, "green" if "assigned" in result else "red")
+            self.show_view_personnel()
+        else:
+            self.display_message("No pending orders found.", "red")
+
+    def show_generate_report_frame(self):
+        self.clear_frame()
+        self.current_frame = ctk.CTkFrame(self, corner_radius=15)
+        self.current_frame.pack(pady=20, padx=20, fill="both", expand=True)
+
+        report_label = ctk.CTkLabel(self.current_frame, text="Generate Monthly Earnings Report",
+                                     font=ctk.CTkFont(size=24, weight="bold"))
+        report_label.pack(pady=(10, 20))
+
+        postal_code_label = ctk.CTkLabel(self.current_frame, text="Enter Postal Code Prefix (3 digits):")
+        postal_code_label.pack(pady=(10, 5))
+
+        self.postal_code_entry = ctk.CTkEntry(self.current_frame, placeholder_text="e.g., 123")
+        self.postal_code_entry.pack(pady=(5, 10))
+
+        generate_button = ctk.CTkButton(self.current_frame, text="Generate Report", command=self.generate_report)
+        generate_button.pack(pady=(10, 10))
+
+        back_button = ctk.CTkButton(self.current_frame, text="Back", command=self.show_admin_menu_frame)
+        back_button.pack(pady=(10, 10))
+
+    def generate_report(self):
+        postal_code_prefix = self.postal_code_entry.get()
+        if not postal_code_prefix or len(postal_code_prefix) != 3:
+            self.display_message("Invalid postal code prefix. Please enter 3 digits.", "red")
+            return
+
+        monthly_earnings = self.staff_op_handler.generate_monthly_earnings_report(postal_code_prefix)
+
+
+        report_result_label = ctk.CTkLabel(self.current_frame,
+                                           text=f"Monthly earnings for postal code prefix '{postal_code_prefix}': ${monthly_earnings:.2f}",
+                                           text_color="white", fg_color="green", corner_radius=10)
+        report_result_label.pack(pady=(5, 10))
+
 
     def show_view_pizzas(self):
         self.clear_frame()
@@ -774,6 +859,69 @@ class ItemGUI(ctk.CTk):
         else:
             self.display_message(f"Registration failed for user '{name}'.", "red")
 
+
+class StaffOp:
+    def __init__(self, db_url):
+        engine = create_engine(db_url)
+        session = sessionmaker(bind=engine)
+        self.session = session()
+
+    def display_pending_orders(self):
+        try:
+            pending_orders = (
+                self.session.query(Order)
+                .filter(Order.status != "Delivered")
+                .order_by(Order.status)
+                .all()
+            )
+            return pending_orders
+        except Exception as e:
+            print(f"An error occurred while displaying pending orders: {e}")
+            return []
+
+    def generate_monthly_earnings_report(self, postal_code_prefix=None):
+
+        try:
+
+            current_month = datetime.now().month
+            current_year = datetime.now().year
+            query = self.session.query(func.sum(Order.total_price)) \
+                .filter(extract("month", Order.order_date) == current_month) \
+                .filter(extract("year", Order.order_date) == current_year)
+
+            if postal_code_prefix:
+                query = query.filter(Order.customer_address.like(f"{postal_code_prefix}%"))
+
+            monthly_earnings = query.scalar()
+            return monthly_earnings if monthly_earnings else 0.0
+
+        except Exception as e:
+            print(f"An error occurred while generating monthly earnings report: {e}")
+            return 0.0
+
+    def get_delivery_personnel(self):
+        try:
+            personnel = self.session.query(DeliveryPersonnel).all()
+            return personnel
+        except Exception as e:
+            print(f"An error occurred while fetching delivery personnel: {e}")
+            return []
+
+    def assign_rider_to_order(self, order):
+        try:
+            rider = self.session.query(DeliveryPersonnel).filter_by(available=True).first()
+
+            if rider:
+                order.delivery_person = rider
+                order.assigned_time = datetime.now()
+                rider.available = False
+                self.session.commit()
+                return f"Rider {rider.name} assigned to order {order.id}."
+            else:
+                return "No riders available at the moment."
+
+        except Exception as e:
+            return f"Error assigning rider: {e}"
 
 if __name__ == "__main__":
     app = ItemGUI()

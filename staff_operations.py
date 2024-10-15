@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import create_engine, func, extract
+from sqlalchemy import create_engine, extract
+from sqlalchemy.sql import func
 from sqlalchemy.orm import sessionmaker
 
 from models import Order

@@ -105,22 +105,26 @@ class PizzaService:
             return None
 
     def create_order(self, customer_id, pizzas, drinks, desserts, is_discount_applied, total_price):
-        order_count = self.order_status_tracker.get_order_count(customer_id)
-        discount = 0.1 if order_count % 10 == 0 or self.order_status_tracker.is_birthday else 0.0
-        new_order = Order (
-            order_date=datetime.now(),
-            customer_id=customer_id,
-            is_discount_applied=is_discount_applied,
-            total_price=total_price * (1-discount),
-            status = "Pending"
-        )
-        self.session.add(new_order)
-        self.session.commit()
+        try:
+            order_count = self.order_status_tracker.get_order_count(customer_id)
+            discount = 0.1 if order_count % 10 == 0 or self.order_status_tracker.is_birthday else 0.0
+            new_order = Order (
+                order_date=datetime.now(),
+                customer_id=customer_id,
+                is_discount_applied=is_discount_applied,
+                total_price=total_price * (1-discount),
+                status = "Pending"
+            )
+            self.session.add(new_order)
+            self.session.commit()
 
-        for pizza in pizzas:
-            self.session.execute(order_pizzas.insert().values(order_id = new_order.id, pizza_id = pizza.Id))
-        for drink in drinks:
-            self.session.execute(order_drinks.insert().values(order_id = new_order.id, drink_id = drink.Id))
+            for pizza in pizzas:
+                self.session.execute(order_pizzas.insert().values(order_id = new_order.id, pizza_id = pizza.Id))
+            for drink in drinks:
+                self.session.execute(order_drinks.insert().values(order_id = new_order.id, drink_id = drink.Id))
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return None
 
     def cancel_order(self, order_id):
         if self.order_status_tracker.cancel_order(order_id):
