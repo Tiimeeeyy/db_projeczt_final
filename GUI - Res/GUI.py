@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import sessionmaker
-from models import Customer, Pizza, Admin
+from models import Customer, Pizza, Drink, Dessert, Admin
 
 ctk.set_appearance_mode("light")
 ctk.set_default_color_theme("green")
@@ -81,7 +81,7 @@ class CustomerHandling:
             return False
 
 
-class PizzaHandling:
+class ItemHandling:
     def __init__(self, db_url):
         try:
             engine = create_engine(db_url)
@@ -91,43 +91,100 @@ class PizzaHandling:
             print(f"Error connecting to the database: {e}")
             self.session = None
 
-    def get_pizzas(self):
+    def get_items(self, item_type):
         if not self.session:
             print("Database session is not available.")
             return []
 
         try:
-            pizzas = self.session.query(Pizza).all()
-            return pizzas
+            if item_type == "Pizza":
+                items = self.session.query(Pizza).all()
+            elif item_type == "Drink":
+                items = self.session.query(Drink).all()
+            elif item_type == "Dessert":
+                items = self.session.query(Dessert).all()
+            else:
+                items = []
+            return items
         except exc.SQLAlchemyError as e:
-            print(f"Error retrieving pizzas: {e}")
+            print(f"Error retrieving items: {e}")
             return []
 
-    def add_pizza(self, name, price, is_vegetarian, is_vegan):
+    def add_item(self, item_type, name, price, **kwargs):
         if not self.session:
             print("Database session is not available.")
             return False
 
-        new_pizza = Pizza(name=name, price=price, is_vegetarian=is_vegetarian, is_vegan=is_vegan)
-        self.session.add(new_pizza)
+        if item_type == "Pizza":
+            new_item = Pizza(name=name, price=price, is_vegetarian=kwargs.get("is_vegetarian", False),
+                             is_vegan=kwargs.get("is_vegan", False))
+        elif item_type == "Drink":
+            new_item = Drink(name=name, price=price)
+        elif item_type == "Dessert":
+            new_item = Dessert(name=name, price=price)
+        else:
+            print(f"Invalid item type: {item_type}")
+            return False
+
+        self.session.add(new_item)
         try:
             self.session.commit()
-            print(f"Pizza '{name}' added to the catalogue.")
+            print(f"{item_type} '{name}' added to the catalogue.")
             return True
         except Exception as e:
             self.session.rollback()
-            print(f"Error adding pizza: {e}")
+            print(f"Error adding {item_type.lower()}: {e}")
+            return False
+
+    def update_item(self, item_type, item_id, name=None, price=None, **kwargs):
+        if not self.session:
+            print("Database session is not available.")
+            return False
+
+        try:
+            if item_type == "Pizza":
+                item = self.session.query(Pizza).get(item_id)
+                if name:
+                    item.name = name
+                if price is not None:
+                    item.price = price
+                if "is_vegetarian" in kwargs:
+                    item.is_vegetarian = kwargs["is_vegetarian"]
+                if "is_vegan" in kwargs:
+                    item.is_vegan = kwargs["is_vegan"]
+            elif item_type == "Drink":
+                item = self.session.query(Drink).get(item_id)
+                if name:
+                    item.name = name
+                if price is not None:
+                    item.price = price
+            elif item_type == "Dessert":
+                item = self.session.query(Dessert).get(item_id)
+                if name:
+                    item.name = name
+                if price is not None:
+                    item.price = price
+            else:
+                print(f"Invalid item type: {item_type}")
+                return False
+
+            self.session.commit()
+            print(f"{item_type} '{item.name}' updated successfully.")
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"Error updating {item_type.lower()}: {e}")
             return False
 
 
-class PizzaGUI(ctk.CTk):
+class ItemGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         self.customer_handler = CustomerHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
-        self.pizza_handler = PizzaHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
+        self.item_handler = ItemHandling("mysql+pymysql://root:Porto123@localhost/pizza_db")
 
-        self.title("1453-Pizza")
+        self.title("1453-Items")
         self.geometry("500x600")
         self.resizable(False, False)
 
@@ -137,7 +194,7 @@ class PizzaGUI(ctk.CTk):
     def init_login_frame(self):
         self.login_frame = ctk.CTkFrame(self, corner_radius=15)
 
-        screen_label = ctk.CTkLabel(self.login_frame, text="1453-Pizza", font=ctk.CTkFont(size=24, weight="bold"))
+        screen_label = ctk.CTkLabel(self.login_frame, text="1453-Items", font=ctk.CTkFont(size=24, weight="bold"))
         screen_label.pack(pady=(10, 20))
 
         self.username_entry = ctk.CTkEntry(self.login_frame, placeholder_text="Username")
@@ -170,7 +227,8 @@ class PizzaGUI(ctk.CTk):
         self.reg_password_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Password", show="*")
         self.reg_password_entry.pack(pady=10, fill="x")
 
-        self.reg_confirm_password_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Confirm Password", show="*")
+        self.reg_confirm_password_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Confirm Password",
+                                                       show="*")
         self.reg_confirm_password_entry.pack(pady=10, fill="x")
 
         self.reg_gender_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Gender")
@@ -197,10 +255,12 @@ class PizzaGUI(ctk.CTk):
         menu_label = ctk.CTkLabel(self.menu_frame, text="Main Menu", font=ctk.CTkFont(size=24, weight="bold"))
         menu_label.pack(pady=(10, 20))
 
-        pizzas = self.pizza_handler.get_pizzas()
-        for pizza in pizzas:
-            pizza_label = ctk.CTkLabel(self.menu_frame, text=f"{pizza.name} - ${pizza.price}")
-            pizza_label.pack(pady=(5, 5))
+        item_types = ["Pizza", "Drink", "Dessert"]
+        for item_type in item_types:
+            items = self.item_handler.get_items(item_type)
+            for item in items:
+                item_label = ctk.CTkLabel(self.menu_frame, text=f"{item.name} - ${item.price}")
+                item_label.pack(pady=(5, 5))
 
         logout_button = ctk.CTkButton(self.menu_frame, text="Logout", command=self.show_login_frame)
         logout_button.pack(pady=(10, 20))
@@ -208,68 +268,176 @@ class PizzaGUI(ctk.CTk):
     def init_admin_menu_frame(self):
         self.admin_menu_frame = ctk.CTkScrollableFrame(self, corner_radius=15)
 
-        admin_menu_label = ctk.CTkLabel(self.admin_menu_frame, text="Admin Menu", font=ctk.CTkFont(size=24, weight="bold"))
+        admin_menu_label = ctk.CTkLabel(self.admin_menu_frame, text="Admin Menu",
+                                        font=ctk.CTkFont(size=24, weight="bold"))
         admin_menu_label.pack(pady=(10, 20))
 
-        item_types = ["Pizza", "Drink", "Dessert"]
-        selected_item_type = ctk.StringVar(value="Pizza")
-        item_type_label = ctk.CTkLabel(self.admin_menu_frame, text="Select Item Type:")
-        item_type_label.pack(pady=(10, 5))
-        item_type_dropdown = ctk.CTkOptionMenu(self.admin_menu_frame, values=item_types, variable=selected_item_type, command=self.update_item_fields)
-        item_type_dropdown.pack(pady=(5, 20))
+        add_item_button = ctk.CTkButton(self.admin_menu_frame, text="Add Item", command=self.show_add_item_frame)
+        add_item_button.pack(pady=(10, 10))
 
-        self.item_fields_frame = ctk.CTkFrame(self.admin_menu_frame)
-        self.item_fields_frame.pack(pady=(5, 20), fill="both", expand=True)
+        update_item_button = ctk.CTkButton(self.admin_menu_frame, text="Update Item",
+                                           command=self.show_update_item_frame)
+        update_item_button.pack(pady=(10, 10))
 
-        self.update_item_fields(selected_item_type.get())
-        save_button = ctk.CTkButton(self.admin_menu_frame, text="Save", command=lambda: self.save_item(selected_item_type.get()))
-        save_button.pack(pady=(10, 10))
         back_button = ctk.CTkButton(self.admin_menu_frame, text="Back", command=self.show_login_frame)
         back_button.pack(pady=(10, 10))
 
-    def update_item_fields(self, item_type):
-        for widget in self.item_fields_frame.winfo_children():
+    def show_add_item_frame(self):
+        if hasattr(self, 'admin_menu_frame') and self.admin_menu_frame is not None:
+            self.admin_menu_frame.pack_forget()
+            self.admin_menu_frame.destroy()
+        self.init_add_item_frame()
+        self.add_item_frame.pack(pady=50, padx=50, fill="both", expand=True)
+        if hasattr(self, 'add_item_frame') and self.add_item_frame is not None:
+            self.add_item_frame.destroy()
+        self.init_add_item_frame()
+        self.add_item_frame.pack(pady=50, padx=50, fill="both", expand=True)
+
+    def show_update_item_frame(self):
+        if hasattr(self, 'admin_menu_frame') and self.admin_menu_frame is not None:
+            self.admin_menu_frame.pack_forget()
+            self.admin_menu_frame.destroy()
+        self.init_update_item_frame()
+        self.update_item_frame.pack(pady=50, padx=50, fill="both", expand=True)
+        if hasattr(self, 'update_item_frame') and self.update_item_frame is not None:
+            self.update_item_frame.destroy()
+        self.init_update_item_frame()
+        self.update_item_frame.pack(pady=50, padx=50, fill="both", expand=True)
+
+    def init_add_item_frame(self):
+        self.add_item_frame = ctk.CTkScrollableFrame(self, corner_radius=15)
+
+        item_types = ["Pizza", "Drink", "Dessert"]
+        selected_item_type = ctk.StringVar(value="Pizza")
+        item_type_label = ctk.CTkLabel(self.add_item_frame, text="Select Item Type:")
+        item_type_label.pack(pady=(10, 5))
+        item_type_dropdown = ctk.CTkOptionMenu(self.add_item_frame, values=item_types, variable=selected_item_type,
+                                               command=self.update_add_item_fields)
+        item_type_dropdown.pack(pady=(5, 20))
+
+        self.add_item_fields_frame = ctk.CTkFrame(self.add_item_frame)
+        self.add_item_fields_frame.pack(pady=(5, 20), fill="both", expand=True)
+
+        self.update_add_item_fields(selected_item_type.get())
+        save_button = ctk.CTkButton(self.add_item_frame, text="Save",
+                                    command=lambda: self.save_item(selected_item_type.get()))
+        save_button.pack(pady=(10, 10))
+        back_button = ctk.CTkButton(self.add_item_frame, text="Back", command=self.show_admin_menu_frame)
+        back_button.pack(pady=(10, 10))
+
+    def init_update_item_frame(self):
+        self.update_item_frame = ctk.CTkScrollableFrame(self, corner_radius=15)
+
+        item_types = ["Pizza", "Drink", "Dessert"]
+        selected_item_type = ctk.StringVar(value="Pizza")
+        item_type_label = ctk.CTkLabel(self.update_item_frame, text="Select Item Type:")
+        item_type_label.pack(pady=(10, 5))
+        item_type_dropdown = ctk.CTkOptionMenu(self.update_item_frame, values=item_types, variable=selected_item_type,
+                                               command=self.update_update_item_fields)
+        item_type_dropdown.pack(pady=(5, 20))
+
+        self.update_item_fields_frame = ctk.CTkFrame(self.update_item_frame)
+        self.update_item_fields_frame.pack(pady=(5, 20), fill="both", expand=True)
+
+        self.update_update_item_fields(selected_item_type.get())
+        update_button = ctk.CTkButton(self.update_item_frame, text="Update",
+                                      command=lambda: self.update_item(selected_item_type.get()))
+        update_button.pack(pady=(10, 10))
+        back_button = ctk.CTkButton(self.update_item_frame, text="Back", command=self.show_admin_menu_frame)
+        back_button.pack(pady=(10, 10))
+
+    def update_add_item_fields(self, item_type):
+        for widget in self.add_item_fields_frame.winfo_children():
             widget.destroy()
 
         if item_type == "Pizza":
-            self.name_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Pizza Name")
+            self.name_entry = ctk.CTkEntry(self.add_item_fields_frame, placeholder_text="Pizza Name")
             self.name_entry.pack(pady=(10, 5))
-            self.price_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Price")
+            self.price_entry = ctk.CTkEntry(self.add_item_fields_frame, placeholder_text="Price")
             self.price_entry.pack(pady=(10, 5))
             self.is_vegetarian_var = ctk.BooleanVar()
             self.is_vegan_var = ctk.BooleanVar()
-            vegetarian_checkbox = ctk.CTkCheckBox(self.item_fields_frame, text="Vegetarian", variable=self.is_vegetarian_var)
+            vegetarian_checkbox = ctk.CTkCheckBox(self.add_item_fields_frame, text="Vegetarian",
+                                                  variable=self.is_vegetarian_var)
             vegetarian_checkbox.pack(pady=(10, 5))
-            vegan_checkbox = ctk.CTkCheckBox(self.item_fields_frame, text="Vegan", variable=self.is_vegan_var)
+            vegan_checkbox = ctk.CTkCheckBox(self.add_item_fields_frame, text="Vegan", variable=self.is_vegan_var)
             vegan_checkbox.pack(pady=(10, 5))
 
         elif item_type == "Drink":
-            self.name_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Drink Name")
+            self.name_entry = ctk.CTkEntry(self.add_item_fields_frame, placeholder_text="Drink Name")
             self.name_entry.pack(pady=(10, 5))
-            self.price_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Price")
+            self.price_entry = ctk.CTkEntry(self.add_item_fields_frame, placeholder_text="Price")
             self.price_entry.pack(pady=(10, 5))
 
         elif item_type == "Dessert":
-            self.name_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Dessert Name")
+            self.name_entry = ctk.CTkEntry(self.add_item_fields_frame, placeholder_text="Dessert Name")
             self.name_entry.pack(pady=(10, 5))
-            self.price_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Price")
+            self.price_entry = ctk.CTkEntry(self.add_item_fields_frame, placeholder_text="Price")
+            self.price_entry.pack(pady=(10, 5))
+
+    def update_update_item_fields(self, item_type):
+        for widget in self.update_item_fields_frame.winfo_children():
+            widget.destroy()
+
+        self.item_id_entry = ctk.CTkEntry(self.update_item_fields_frame, placeholder_text="Item ID")
+        self.item_id_entry.pack(pady=(10, 5))
+
+        if item_type == "Pizza":
+            self.name_entry = ctk.CTkEntry(self.update_item_fields_frame, placeholder_text="Pizza Name")
+            self.name_entry.pack(pady=(10, 5))
+            self.price_entry = ctk.CTkEntry(self.update_item_fields_frame, placeholder_text="Price")
+            self.price_entry.pack(pady=(10, 5))
+            self.is_vegetarian_var = ctk.BooleanVar()
+            self.is_vegan_var = ctk.BooleanVar()
+            vegetarian_checkbox = ctk.CTkCheckBox(self.update_item_fields_frame, text="Vegetarian",
+                                                  variable=self.is_vegetarian_var)
+            vegetarian_checkbox.pack(pady=(10, 5))
+            vegan_checkbox = ctk.CTkCheckBox(self.update_item_fields_frame, text="Vegan", variable=self.is_vegan_var)
+            vegan_checkbox.pack(pady=(10, 5))
+
+        elif item_type == "Drink":
+            self.name_entry = ctk.CTkEntry(self.update_item_fields_frame, placeholder_text="Drink Name")
+            self.name_entry.pack(pady=(10, 5))
+            self.price_entry = ctk.CTkEntry(self.update_item_fields_frame, placeholder_text="Price")
+            self.price_entry.pack(pady=(10, 5))
+
+        elif item_type == "Dessert":
+            self.name_entry = ctk.CTkEntry(self.update_item_fields_frame, placeholder_text="Dessert Name")
+            self.name_entry.pack(pady=(10, 5))
+            self.price_entry = ctk.CTkEntry(self.update_item_fields_frame, placeholder_text="Price")
             self.price_entry.pack(pady=(10, 5))
 
     def save_item(self, item_type):
+        if hasattr(self, 'add_item_fields_frame') and self.add_item_fields_frame is not None:
+            for widget in self.add_item_fields_frame.winfo_children():
+                widget.destroy()
+        name = self.name_entry.get()
+        price = float(self.price_entry.get())
         if item_type == "Pizza":
-            name = self.name_entry.get()
-            price = float(self.price_entry.get())
             is_vegetarian = self.is_vegetarian_var.get()
             is_vegan = self.is_vegan_var.get()
-            self.pizza_handler.add_pizza(name, price, is_vegetarian, is_vegan)
+            self.item_handler.add_item(item_type, name, price, is_vegetarian=is_vegetarian, is_vegan=is_vegan)
+        else:
+            self.item_handler.add_item(item_type, name, price)
 
-        elif item_type in ["Drink", "Dessert"]:
-            name = self.name_entry.get()
-            price = float(self.price_entry.get())
-            self.pizza_handler.add_pizza(name, price, is_vegetarian=False, is_vegan=False)
+        self.init_admin_menu_frame()
+        self.admin_menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
 
-        self.admin_menu_frame.pack_forget()
-        self.admin_menu_frame.destroy()
+    def update_item(self, item_type):
+        if hasattr(self, 'update_item_fields_frame') and self.update_item_fields_frame is not None:
+            for widget in self.update_item_fields_frame.winfo_children():
+                widget.destroy()
+        item_id = int(self.item_id_entry.get())
+        name = self.name_entry.get()
+        price = float(self.price_entry.get()) if self.price_entry.get() else None
+        if item_type == "Pizza":
+            is_vegetarian = self.is_vegetarian_var.get()
+            is_vegan = self.is_vegan_var.get()
+            self.item_handler.update_item(item_type, item_id, name, price, is_vegetarian=is_vegetarian,
+                                          is_vegan=is_vegan)
+        else:
+            self.item_handler.update_item(item_type, item_id, name, price)
+
         self.init_admin_menu_frame()
         self.admin_menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
 
@@ -303,7 +471,8 @@ class PizzaGUI(ctk.CTk):
             self.init_menu_frame()
             self.menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
         else:
-            error_label = ctk.CTkLabel(self.login_frame, text="Login failed! Invalid credentials.", text_color="white", fg_color="red", corner_radius=10)
+            error_label = ctk.CTkLabel(self.login_frame, text="Login failed! Invalid credentials.", text_color="white",
+                                       fg_color="red", corner_radius=10)
             error_label.pack(pady=(5, 10))
             self.after(1000, error_label.destroy)
 
@@ -316,7 +485,8 @@ class PizzaGUI(ctk.CTk):
             self.init_admin_menu_frame()
             self.admin_menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
         else:
-            error_label = ctk.CTkLabel(self.login_frame, text="Admin login failed! Invalid credentials.", text_color="white", fg_color="red", corner_radius=10)
+            error_label = ctk.CTkLabel(self.login_frame, text="Admin login failed! Invalid credentials.",
+                                       text_color="white", fg_color="red", corner_radius=10)
             error_label.pack(pady=(5, 10))
             self.after(1000, error_label.destroy)
 
@@ -337,5 +507,5 @@ class PizzaGUI(ctk.CTk):
 
 
 if __name__ == "__main__":
-    app = PizzaGUI()
+    app = ItemGUI()
     app.mainloop()
