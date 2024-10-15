@@ -5,6 +5,12 @@ import bcrypt
 
 Base = declarative_base()
 
+class Rider(Base):
+    __tablename__ = "riders"
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    available = Column(String, default=True)
+
 class Pizza(Base):
     __tablename__ = 'pizzas'
     Id = Column(Integer, primary_key=True, autoincrement=True)
@@ -76,6 +82,9 @@ class Order(Base):
     customer_id = Column(Integer, ForeignKey('customers.Id'), name='CustomerId', nullable=True)
     customer = relationship('Customer')
     status = Column(String, name='Status', default='Pending', nullable=False)
+    rider_id = Column(Integer, ForeignKey("riders.id"))
+    rider = relationship("Rider", backref="orders")
+    assigned_time = Column(DateTime)
 
 class DeliveryPerson(Base):
     __tablename__ = 'delivery_persons'
