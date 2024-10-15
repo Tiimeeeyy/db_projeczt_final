@@ -19,19 +19,20 @@ class CustomerHandling:
             self.session = None
 
     def create_default_admin(self):
-        admin = self.session.query(Admin).filter_by(name="admin").first()
-        if not admin:
-            new_admin = Admin(name="admin", gender="N/A", password="")
-            new_admin.set_pw("admin123")
-            try:
-                self.session.add(new_admin)
-                self.session.commit()
-                print("Default admin created with username 'admin' and password 'admin123'.")
-            except Exception as e:
-                self.session.rollback()
-                print(f"Error creating default admin: {e}")
+        if self.session:
+            admin = self.session.query(Admin).filter_by(name="admin").first()
+            if not admin:
+                new_admin = Admin(name="admin", gender="N/A", password="")
+                new_admin.set_pw("admin123")
+                try:
+                    self.session.add(new_admin)
+                    self.session.commit()
+                    print("Default admin created with username 'admin' and password 'admin123'.")
+                except Exception as e:
+                    self.session.rollback()
+                    print(f"Error creating default admin: {e}")
 
-    def register_customer(self, name, gender, birthdate, address, password, is_admin=False):
+    def register_customer(self, name, gender, birthdate, address, password):
         if not self.session:
             print("Database session is not available.")
             return False
@@ -40,8 +41,7 @@ class CustomerHandling:
             name=name,
             gender=gender,
             birthdate=birthdate,
-            address=address,
-            is_admin=is_admin
+            address=address
         )
         new_customer.set_pw(password)
         try:
@@ -61,12 +61,8 @@ class CustomerHandling:
 
         customer = self.session.query(Customer).filter_by(name=username).first()
         if customer and customer.check_pw(password):
-            if customer.is_admin:
-                print(f"Admin '{username}' logged in successfully")
-                return "admin"
-            else:
-                print(f"Customer '{username}' logged in successfully")
-                return "customer"
+            print(f"Customer '{username}' logged in successfully")
+            return "customer"
         else:
             print("Invalid username or password")
             return False
@@ -174,8 +170,7 @@ class PizzaGUI(ctk.CTk):
         self.reg_password_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Password", show="*")
         self.reg_password_entry.pack(pady=10, fill="x")
 
-        self.reg_confirm_password_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Confirm Password",
-                                                       show="*")
+        self.reg_confirm_password_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Confirm Password", show="*")
         self.reg_confirm_password_entry.pack(pady=10, fill="x")
 
         self.reg_gender_entry = ctk.CTkEntry(self.register_frame, placeholder_text="Gender")
@@ -202,6 +197,11 @@ class PizzaGUI(ctk.CTk):
         menu_label = ctk.CTkLabel(self.menu_frame, text="Main Menu", font=ctk.CTkFont(size=24, weight="bold"))
         menu_label.pack(pady=(10, 20))
 
+        pizzas = self.pizza_handler.get_pizzas()
+        for pizza in pizzas:
+            pizza_label = ctk.CTkLabel(self.menu_frame, text=f"{pizza.name} - ${pizza.price}")
+            pizza_label.pack(pady=(5, 5))
+
         logout_button = ctk.CTkButton(self.menu_frame, text="Logout", command=self.show_login_frame)
         logout_button.pack(pady=(10, 20))
 
@@ -211,11 +211,67 @@ class PizzaGUI(ctk.CTk):
         admin_menu_label = ctk.CTkLabel(self.admin_menu_frame, text="Admin Menu", font=ctk.CTkFont(size=24, weight="bold"))
         admin_menu_label.pack(pady=(10, 20))
 
-        add_pizza_button = ctk.CTkButton(self.admin_menu_frame, text="Add Pizza", command=self.admin_add_pizza)
-        add_pizza_button.pack(pady=(10, 10))
+        item_types = ["Pizza", "Drink", "Dessert"]
+        selected_item_type = ctk.StringVar(value="Pizza")
+        item_type_label = ctk.CTkLabel(self.admin_menu_frame, text="Select Item Type:")
+        item_type_label.pack(pady=(10, 5))
+        item_type_dropdown = ctk.CTkOptionMenu(self.admin_menu_frame, values=item_types, variable=selected_item_type, command=self.update_item_fields)
+        item_type_dropdown.pack(pady=(5, 20))
 
-        logout_button = ctk.CTkButton(self.admin_menu_frame, text="Logout", command=self.show_login_frame)
-        logout_button.pack(pady=(10, 20))
+        self.item_fields_frame = ctk.CTkFrame(self.admin_menu_frame)
+        self.item_fields_frame.pack(pady=(5, 20), fill="both", expand=True)
+
+        self.update_item_fields(selected_item_type.get())
+        save_button = ctk.CTkButton(self.admin_menu_frame, text="Save", command=lambda: self.save_item(selected_item_type.get()))
+        save_button.pack(pady=(10, 10))
+        back_button = ctk.CTkButton(self.admin_menu_frame, text="Back", command=self.show_login_frame)
+        back_button.pack(pady=(10, 10))
+
+    def update_item_fields(self, item_type):
+        for widget in self.item_fields_frame.winfo_children():
+            widget.destroy()
+
+        if item_type == "Pizza":
+            self.name_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Pizza Name")
+            self.name_entry.pack(pady=(10, 5))
+            self.price_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Price")
+            self.price_entry.pack(pady=(10, 5))
+            self.is_vegetarian_var = ctk.BooleanVar()
+            self.is_vegan_var = ctk.BooleanVar()
+            vegetarian_checkbox = ctk.CTkCheckBox(self.item_fields_frame, text="Vegetarian", variable=self.is_vegetarian_var)
+            vegetarian_checkbox.pack(pady=(10, 5))
+            vegan_checkbox = ctk.CTkCheckBox(self.item_fields_frame, text="Vegan", variable=self.is_vegan_var)
+            vegan_checkbox.pack(pady=(10, 5))
+
+        elif item_type == "Drink":
+            self.name_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Drink Name")
+            self.name_entry.pack(pady=(10, 5))
+            self.price_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Price")
+            self.price_entry.pack(pady=(10, 5))
+
+        elif item_type == "Dessert":
+            self.name_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Dessert Name")
+            self.name_entry.pack(pady=(10, 5))
+            self.price_entry = ctk.CTkEntry(self.item_fields_frame, placeholder_text="Price")
+            self.price_entry.pack(pady=(10, 5))
+
+    def save_item(self, item_type):
+        if item_type == "Pizza":
+            name = self.name_entry.get()
+            price = float(self.price_entry.get())
+            is_vegetarian = self.is_vegetarian_var.get()
+            is_vegan = self.is_vegan_var.get()
+            self.pizza_handler.add_pizza(name, price, is_vegetarian, is_vegan)
+
+        elif item_type in ["Drink", "Dessert"]:
+            name = self.name_entry.get()
+            price = float(self.price_entry.get())
+            self.pizza_handler.add_pizza(name, price, is_vegetarian=False, is_vegan=False)
+
+        self.admin_menu_frame.pack_forget()
+        self.admin_menu_frame.destroy()
+        self.init_admin_menu_frame()
+        self.admin_menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
 
     def show_login_frame(self):
         if hasattr(self, 'register_frame') and self.register_frame is not None:
@@ -237,54 +293,32 @@ class PizzaGUI(ctk.CTk):
         self.init_register_frame()
         self.register_frame.pack(pady=20, padx=20, fill="both", expand=True)
 
-    def show_menu_frame(self, is_admin=False):
-        if hasattr(self, 'login_frame') and self.login_frame is not None:
+    def login_customer(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+        login_result = self.customer_handler.login_customer(username, password)
+        if login_result == "customer":
             self.login_frame.pack_forget()
             self.login_frame.destroy()
-        if is_admin:
+            self.init_menu_frame()
+            self.menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
+        else:
+            error_label = ctk.CTkLabel(self.login_frame, text="Login failed! Invalid credentials.", text_color="white", fg_color="red", corner_radius=10)
+            error_label.pack(pady=(5, 10))
+            self.after(1000, error_label.destroy)
+
+    def login_admin(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+        if self.customer_handler.login_admin(username, password):
+            self.login_frame.pack_forget()
+            self.login_frame.destroy()
             self.init_admin_menu_frame()
             self.admin_menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
         else:
-            self.init_menu_frame()
-            pizzas = self.pizza_handler.get_pizzas()
-
-            for widget in self.menu_frame.winfo_children():
-                widget.destroy()
-
-            if not pizzas:
-                no_pizza_label = ctk.CTkLabel(self.menu_frame, text="No pizzas available.")
-                no_pizza_label.pack(pady=(5, 5), padx=(5, 5), fill="x")
-            else:
-                for pizza in pizzas:
-                    pizza_label = ctk.CTkLabel(self.menu_frame, text=f"{pizza.name} - {pizza.price}e")
-                    pizza_label.pack(pady=(5, 5), padx=(5, 5), fill="x")
-
-                    addtocart_button = ctk.CTkButton(self.menu_frame, text="Add",
-                                                     command=lambda p=pizza: self.order_pizza(p))
-                    addtocart_button.pack(pady=(5, 5), padx=(5, 5), fill="x")
-
-            self.menu_frame.pack(pady=50, padx=50, fill="both", expand=True)
-
-    def order_pizza(self, pizza):
-        if not hasattr(self, 'order_cart'):
-            self.order_cart = []
-
-        self.order_cart.append(pizza)
-        self.show_message(f"{pizza.name} added to cart.", bg_color="green", text_color="white")
-
-        for item in self.order_cart:
-            print(f"Cart: {item.name} - {item.price}e")
-
-    def checkout_order(self):
-        if not hasattr(self, 'order_cart') or len(self.order_cart) == 0:
-            self.show_message("Your cart is empty!", bg_color="red", text_color="white")
-            return
-
-        total_price = sum([pizza.price for pizza in self.order_cart])
-        self.show_message(f"Order placed! Total: {total_price}e", bg_color="green", text_color="white")
-
-        self.order_cart = []
-        print("Order checkout completed.")
+            error_label = ctk.CTkLabel(self.login_frame, text="Admin login failed! Invalid credentials.", text_color="white", fg_color="red", corner_radius=10)
+            error_label.pack(pady=(5, 10))
+            self.after(1000, error_label.destroy)
 
     def register_customer(self):
         name = self.reg_username_entry.get()
@@ -293,48 +327,13 @@ class PizzaGUI(ctk.CTk):
         gender = self.reg_gender_entry.get()
         birthdate = self.reg_birthdate_entry.get()
         address = self.reg_address_entry.get()
-
         if password == confirm_password:
             success = self.customer_handler.register_customer(name, gender, birthdate, address, password)
             if success:
-                self.register_frame.pack_forget()
-                self.register_frame.destroy()
-                self.init_login_frame()
-                self.login_frame.pack(pady=50, padx=50, fill="both", expand=True)
-                self.show_message("Registered successfully! Please log in.", bg_color="green", text_color="white")
+                self.show_login_frame()
+                print("Registered successfully! Please log in.")
         else:
-            self.show_message("Passwords do not match.", bg_color="red", text_color="white")
-
-    def login_customer(self):
-        username = self.username_entry.get()
-        password = self.password_entry.get()
-
-        login_result = self.customer_handler.login_customer(username, password)
-        if login_result == "admin":
-            self.show_menu_frame(is_admin=True)
-        elif login_result == "customer":
-            self.show_menu_frame()
-        else:
-            self.show_message("Login failed!", bg_color="red", text_color="white")
-
-    def login_admin(self):
-        username = self.username_entry.get()
-        password = self.password_entry.get()
-
-        if self.customer_handler.login_admin(username, password):
-            self.show_menu_frame(is_admin=True)
-        else:
-            self.show_message("Admin login failed!", bg_color="red", text_color="white")
-
-    def admin_add_pizza(self):
-
-
-
-    def show_message(self, message, bg_color="green", text_color="white"):
-        message_label = ctk.CTkLabel(self, text=message, font=ctk.CTkFont(size=14), fg_color=bg_color,
-                                     text_color=text_color, corner_radius=15)
-        message_label.pack(pady=(10, 10), padx=(10, 10), fill="x")
-        self.after(1500, message_label.destroy)
+            print("Passwords do not match.")
 
 
 if __name__ == "__main__":
