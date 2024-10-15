@@ -75,7 +75,7 @@ class CustomerHandling:
         customer = self.session.query(Customer).filter_by(name=username).first()
         if customer and customer.check_pw(password):
             print(f"Customer '{username}' logged in successfully")
-            return "customer", customer.id
+            return "customer", customer.Id  # Return customer Id
         else:
             print("Invalid username or password")
             return False
@@ -396,7 +396,6 @@ class ItemGUI(ctk.CTk):
     def place_order(self):
         if not self.cart:
             self.display_message("Your cart is empty.", "red")
-            customer = self.customer_handler.session.query(Customer).filter_by(id=self.current_user_id).first()
             return
 
         try:
@@ -429,7 +428,7 @@ class ItemGUI(ctk.CTk):
 
     def add_to_cart(self, item, item_type):
         self.cart.append({
-            'id': item.Id if hasattr(item, 'Id') else item.id,
+            'id': item.Id,  # Use 'Id' with capital 'I'
             'name': item.name,
             'price': item.price,
             'type': item_type
